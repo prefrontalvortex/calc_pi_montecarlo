@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     __time_t tmp_seconds = now.tv_sec;
 
     char datafilename[256];
-    sprintf(datafilename, "../out/%d_%ld_pi_kalman.csv", NUM_THREADS, (long) tmp_seconds);
+    sprintf(datafilename, "out/%d_%ld_pi_kalman.csv", NUM_THREADS, (long) tmp_seconds);
     FILE *pifile = fopen(datafilename, "w");
     fprintf(pifile, "thread,iters,K_gain,pi_batch,pi_kalman,error\n");
     fclose(pifile);
