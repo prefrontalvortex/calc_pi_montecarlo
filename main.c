@@ -211,7 +211,7 @@ void *threaded_calc_pi(void *arg) {
         delta = pi_est - REAL_PI;
         pifile = fopen(payload->filename, "a");
         logDelta = fabs((double) delta);
-        logDelta = log(logDelta);
+        logDelta = log10(logDelta);
         fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf,%.8lf\n", tid, batch_size*iter, (double) kalman->K_gain,
                 (double) pi_calc, (double) pi_est, (double) delta, logDelta);
         fclose(pifile);
