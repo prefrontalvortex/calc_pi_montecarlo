@@ -16,6 +16,7 @@
 *.o
 *.so
 *.run
+bin
 build
 cmake-build-debug
 
