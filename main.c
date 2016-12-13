@@ -22,7 +22,7 @@
 
 precise_t eps_to_alpha(precise_t epsilon);
 precise_t estimate_pi3(struct drand48_data *rngbuf, long batch_size);
-precise_t estimate_pi3_special(struct drand48_data *rngbuf, long batch_size);
+precise_t estimate_pi3_special(RedbearRNG_data *rngbuf, long batch_size);
 precise_t rand_3sphere_norm(struct drand48_data *rngbuf);
 void *threaded_calc_pi(void *arg);
 
@@ -38,6 +38,7 @@ typedef struct _thread_data_t {
     precise_t pi_est;
     char *filename;
     struct drand48_data *rngbuf;
+    RedbearRNG_data *rngbuf2;
 
 } thread_data_t;
 
@@ -100,6 +101,8 @@ int main(int argc, char **argv) {
     thread_data_t payload[NUM_THREADS];
     pthread_t threads[NUM_THREADS];
     struct drand48_data rngbuf[NUM_THREADS];
+    RedbearRNG_data rngbuf2[NUM_THREADS];
+
     if (pthread_mutex_init(&lock_x, NULL) != 0) {
         fprintf(stderr, "\nFatal: Mutex init failed\n"), exit(EXIT_FAILURE);
     }
@@ -107,10 +110,13 @@ int main(int argc, char **argv) {
 
     for (th=0; th<NUM_THREADS; th++) {
         srand48_r(lseed + th, &(rngbuf[th]));
+        srand_redbear_r( (uint128_t) (lseed + th), &(rngbuf2[th]));
+
         payload[th].tid = th;
         payload[th].kalman = kalman;
         payload[th].batch_size = batch_size;
         payload[th].rngbuf = &(rngbuf[th]);
+        payload[th].rngbuf2 = &(rngbuf2[th]);
         payload[th].filename = datafilename;
     }
 
@@ -127,7 +133,7 @@ int main(int argc, char **argv) {
     return EXIT_SUCCESS;
 }
 
-precise_t estimate_pi3_special(struct drand48_data *rngbuf, long batch_size) {
+precise_t estimate_pi3_special(RedbearRNG_data *rngbuf, long batch_size) {
     int d;
     precise_t r_comp, r_norm = 0;
     uint128_t count_in = 0, count_all =0;
@@ -135,7 +141,7 @@ precise_t estimate_pi3_special(struct drand48_data *rngbuf, long batch_size) {
     for (iter=0; iter<batch_size; iter++) {
         r_norm = 0;
         for (d=0; d<3; d++) {
-            r_comp = rand_uniform_r(rngbuf); // on 0-1
+            r_comp = rand_redbear_uniform_r(rngbuf); // on 0-1
             r_norm += r_comp * r_comp;
         }
         if (r_norm < 1.0) count_in++; // since all we care about is whether sqrt(r) is < 1 or not, we can skip the sqrt!
@@ -194,7 +200,7 @@ void *threaded_calc_pi(void *arg) {
 
     while (1) {
 #ifdef SPECIAL_VEC
-        pi_calc = estimate_pi3_special(payload->rngbuf, batch_size);
+        pi_calc = estimate_pi3_special(payload->rngbuf2, batch_size);
 #else
         pi_calc = estimate_pi3(payload->rngbuf, batch_size);
 #endif
