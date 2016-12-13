@@ -20,7 +20,11 @@ build
 cmake-build-debug
 
 # Intellij
+##########
 .idea
+
+# Output data
+out/*.csv
 
 # Packages #
 ############
