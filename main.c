@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     precise_t pi_est, r_norm, rad_calc[8];
     precise_t pi_calc, ratio, prior, epsilon=99, delta=99, alpha=0.1;
     REAL_PI = 3.1415926535897932384626433832795028841971; //3.141592653589;
-    batch_size = (long) 1e7;
+    double d_batch_size;
     double R_init = 1e-3, Q_init = 1e-6;
 
     uint128_t count_in = 0, count_all =0;
@@ -57,10 +57,15 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_REALTIME, &now);
     __time_t tmp_seconds = now.tv_sec;
 
+    //// Grab parameters from the command line arguments
     arg_t *args = NULL;
     parser_populate(&args, argc, argv);
     parse_assign_i(&NUM_THREADS, "-t", args, "1");
+    parse_assign_d(&d_batch_size, "-b", args, "1e-7");
+    batch_size = (long) d_batch_size;
 
+
+    //// Set up filename for output
     char datafilename[256];
     sprintf(datafilename, "out/%d_%ld_pi_kalman.csv", NUM_THREADS, (long) tmp_seconds);
     FILE *pifile = fopen(datafilename, "w");
