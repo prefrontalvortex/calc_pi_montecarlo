@@ -18,10 +18,11 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 
-
+#define SPECIAL_VEC
 
 precise_t eps_to_alpha(precise_t epsilon);
 precise_t estimate_pi3(struct drand48_data *rngbuf, long batch_size);
+precise_t estimate_pi3_special(struct drand48_data *rngbuf, long batch_size);
 precise_t rand_3sphere_norm(struct drand48_data *rngbuf);
 void *threaded_calc_pi(void *arg);
 
@@ -126,6 +127,26 @@ int main(int argc, char **argv) {
     return EXIT_SUCCESS;
 }
 
+precise_t estimate_pi3_special(struct drand48_data *rngbuf, long batch_size) {
+    int d;
+    precise_t r_comp, r_norm = 0;
+    uint128_t count_in = 0, count_all =0;
+    long iter;
+    for (iter=0; iter<batch_size; iter++) {
+        r_norm = 0;
+        for (d=0; d<3; d++) {
+            r_comp = rand_uniform_r(rngbuf); // on 0-1
+            r_norm += r_comp * r_comp;
+        }
+        if (r_norm < 1.0) count_in++; // since all we care about is whether sqrt(r) is < 1 or not, we can skip the sqrt!
+        count_all++;
+    }
+    precise_t ratio = (precise_t) count_in / (precise_t) count_all;
+//    printf("Ratio: %lf\n", ratio);
+    // v = 4/3 pi r^3 ... pi/6
+    return ratio*6;
+}
+
 precise_t estimate_pi3(struct drand48_data *rngbuf, long batch_size) {
     precise_t vec;
     uint128_t count_in = 0, count_all =0;
@@ -162,6 +183,7 @@ precise_t crit_kalman_observe(Kalman1D *kalman, precise_t obs) {
 void *threaded_calc_pi(void *arg) {
     FILE *pifile;
     int i, tid;
+    double logDelta;
     thread_data_t *payload = (thread_data_t *) arg;
     tid = payload->tid;
     long iter = 0, batch_size = payload->batch_size;
@@ -171,15 +193,21 @@ void *threaded_calc_pi(void *arg) {
     printf("\n<%d> Hi! start.\n", tid);
 
     while (1) {
+#ifdef SPECIAL_VEC
+        pi_calc = estimate_pi3_special(payload->rngbuf, batch_size);
+#else
         pi_calc = estimate_pi3(payload->rngbuf, batch_size);
+#endif
         // ========== ENTER CRITICAL REGION *******
         pthread_mutex_lock(&lock_x);
 //        fprintf(stdout, "%d locked\n", tid);
         pi_est = kalman_observe(kalman, pi_calc);
         delta = pi_est - REAL_PI;
         pifile = fopen(payload->filename, "a");
+        logDelta = fabs((double) delta);
+        logDelta = log(logDelta);
         fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf,%.8lf\n", tid, batch_size*iter, (double) kalman->K_gain,
-                (double) pi_calc, (double) pi_est, (double) delta, log(fabs(((double) delta))));
+                (double) pi_calc, (double) pi_est, (double) delta, logDelta);
         fclose(pifile);
         pthread_mutex_unlock(&lock_x);
         // ========== LEAVE CRITICAL REGION ***
@@ -189,7 +217,7 @@ void *threaded_calc_pi(void *arg) {
             fprintf(stdout, "<%d>Pi Calc :  %.12lf\n", tid, (double) pi_calc);
             fprintf(stdout, "<%d>Pi IIR  :  %.12lf\n", tid, (double) pi_est);
             fprintf(stdout, "<%d>Diff    : %+.12lf\n", tid, (double) (pi_calc - REAL_PI));
-            fprintf(stdout, "Diff IIR: %+.12lf\n", (double) delta);
+            fprintf(stdout, "<%d>Diff IIR: %+.12lf\t logD: %+.5lf\n", tid, (double) delta, logDelta);
 
         }
 
