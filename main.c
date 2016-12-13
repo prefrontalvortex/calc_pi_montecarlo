@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
     parser_populate(&args, argc, argv);
     parse_assign_i(&NUM_THREADS, "-t", args, "1");
     parse_assign_d(&d_batch_size, "-b", args, "1e-7");
+    parse_assign_d(&R_init, "-r", args, "1e-3");
+    parse_assign_d(&Q_init, "-q", args, "1e-6");
     batch_size = (long) d_batch_size;
 
 
@@ -69,13 +71,14 @@ int main(int argc, char **argv) {
     char datafilename[256];
     sprintf(datafilename, "out/%d_%ld_pi_kalman.csv", NUM_THREADS, (long) tmp_seconds);
     FILE *pifile = fopen(datafilename, "w");
-    fprintf(pifile, "thread,iters,K_gain,pi_batch,pi_kalman,error\n");
+    fprintf(pifile, "thread,iters,K_gain,pi_batch,pi_kalman,error,logError\n");
     fclose(pifile);
 
 
 
     fprintf(stderr, "Size of uint128: %d-bit\n Precise_t: %d-bit\n", 8*sizeof(uint128_t), 8*sizeof(precise_t));
     fprintf(stderr, " Num Iters/Batch: %ld\n Num Threads: %d\n", batch_size, NUM_THREADS);
+    fprintf(stderr, " R_init: %ld Q_init: %d\n", R_init, Q_init);
 
     FILE * randfile = fopen("/dev/random", "r");
 
@@ -163,7 +166,7 @@ void *threaded_calc_pi(void *arg) {
     tid = payload->tid;
     long iter = 0, batch_size = payload->batch_size;
     Kalman1D *kalman = payload->kalman;
-    precise_t pi_calc, pi_est;
+    precise_t pi_calc, pi_est, delta;
 
     printf("\n<%d> Hi! start.\n", tid);
 
@@ -173,9 +176,10 @@ void *threaded_calc_pi(void *arg) {
         pthread_mutex_lock(&lock_x);
 //        fprintf(stdout, "%d locked\n", tid);
         pi_est = kalman_observe(kalman, pi_calc);
+        delta = pi_est - REAL_PI;
         pifile = fopen(payload->filename, "a");
-        fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf\n", tid, batch_size*iter, (double) kalman->K_gain,
-                (double) pi_calc, (double) pi_est, (double) pi_est - 3.141592653589);
+        fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf,%.8lf\n", tid, batch_size*iter, (double) kalman->K_gain,
+                (double) pi_calc, (double) pi_est, (double) delta, log(fabs(((double) delta))));
         fclose(pifile);
         pthread_mutex_unlock(&lock_x);
         // ========== LEAVE CRITICAL REGION ***
@@ -185,7 +189,7 @@ void *threaded_calc_pi(void *arg) {
             fprintf(stdout, "<%d>Pi Calc :  %.12lf\n", tid, (double) pi_calc);
             fprintf(stdout, "<%d>Pi IIR  :  %.12lf\n", tid, (double) pi_est);
             fprintf(stdout, "<%d>Diff    : %+.12lf\n", tid, (double) (pi_calc - REAL_PI));
-            fprintf(stdout, "Diff IIR: %+.12lf\n", (double) (pi_est - REAL_PI));
+            fprintf(stdout, "Diff IIR: %+.12lf\n", (double) delta);
 
         }
 
