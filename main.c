@@ -11,6 +11,7 @@
 #include <time.h>
 #include "main.h"
 #include "aux.h"
+#include "argparse.h"
 #include "rng.h"
 #include "kalman.h"
 
@@ -49,13 +50,16 @@ int main(int argc, char **argv) {
     REAL_PI = 3.1415926535897932384626433832795028841971; //3.141592653589;
     batch_size = (long) 1e7;
     double R_init = 1e-3, Q_init = 1e-6;
-    NUM_THREADS = 4;
 
     uint128_t count_in = 0, count_all =0;
 
     struct timespec now;
     clock_gettime(CLOCK_REALTIME, &now);
     __time_t tmp_seconds = now.tv_sec;
+
+    arg_t *args = NULL;
+    parser_populate(&args, argc, argv);
+    parse_assign_i(&NUM_THREADS, "-t", args, "1");
 
     char datafilename[256];
     sprintf(datafilename, "out/%d_%ld_pi_kalman.csv", NUM_THREADS, (long) tmp_seconds);
@@ -66,14 +70,11 @@ int main(int argc, char **argv) {
 
 
     fprintf(stderr, "Size of uint128: %d-bit\n Precise_t: %d-bit\n", 8*sizeof(uint128_t), 8*sizeof(precise_t));
-    fprintf(stderr, "Num Iters: %ld\n", batch_size);
+    fprintf(stderr, " Num Iters/Batch: %ld\n Num Threads: %d\n", batch_size, NUM_THREADS);
 
     FILE * randfile = fopen("/dev/random", "r");
 
-    if (randfile == NULL) {
-        fprintf(stderr, "Fatal error! Can't open file!\n");
-        exit(EXIT_FAILURE);
-    }
+    if (randfile == NULL)   die("Fatal error! Can't open file!\n");
     lseed = rand_long_from_file(randfile);
     fclose(randfile);
     seed = (int) lseed;
@@ -113,34 +114,6 @@ int main(int argc, char **argv) {
         pthread_join(threads[th], NULL);
         printf("<M>... %d joined. \n", th);
     }
-
-
-/*
-    while (fabs(epsilon) > 1e-11) {
-        iter++;
-        seed = (seed * iter) % RAND_MAX;
-        fprintf(stdout, "Iter: %5ld Kalman K: %le Seed: %x\n", iter, (double) kalman->K_gain, seed);
-        pi_calc = estimate_pi3(seed, batch_size);
-        pi_est = kalman_observe(kalman, pi_calc);
-        delta = kalman->P;
-
-//    fprintf(stdout, "Ratio: %lf\n", (double) ratio);
-        epsilon = pi_est - REAL_PI;
-        fprintf(stdout, "Delta   :  %.12lf\n", (double) delta);
-        fprintf(stdout, "Pi Calc :  %.12lf\n", (double) pi_calc);
-        fprintf(stdout, "Pi IIR  :  %.12lf\n", (double) pi_est);
-        fprintf(stdout, "Diff    : %+.12lf\n", (double) (pi_calc - REAL_PI));
-//        fprintf(stdout, "Target  :  3.141592653589\n");
-        fprintf(stdout, "Diff IIR: %+.12lf\n", (double) epsilon);
-        pifile = fopen(datafilename, "a");
-        fprintf(pifile, "%ld,%.16lf,%.16lf,%.16lf\n", batch_size*iter, (double) pi_calc, (double) pi_est, (double) pi_est - 3.141592653589);
-        fclose(pifile);
-
-    }
-*/
-
-
-
 
     return EXIT_SUCCESS;
 }
@@ -215,9 +188,6 @@ void *threaded_calc_pi(void *arg) {
 
     }
 
-    //--------------YOUR WORK HERE----------------------------
-
-    printf("\n<%d> done.\n", tid);
     pthread_exit(NULL);
 }
 
