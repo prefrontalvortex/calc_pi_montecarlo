@@ -250,8 +250,9 @@ void *threaded_calc_pi(void *arg) {
 
 void *threaded_calc_pi2(void *arg) {
     FILE *pifile;
+    stopwatch_t time;
     int i, tid;
-    double logDelta;
+    double logDelta, seconds;
     thread_data_t *payload = (thread_data_t *) arg;
     tid = payload->tid;
     long iter = 0, batch_size = payload->batch_size;
@@ -266,12 +267,12 @@ void *threaded_calc_pi2(void *arg) {
     fclose(pifile);
 
     while (1) {
+        startTimer(&time);
 #ifdef SPECIAL_VEC
         pi_calc = estimate_pi3_special(payload->rngbuf2, batch_size);
 #else
         pi_calc = estimate_pi3(payload->rngbuf, batch_size);
 #endif
-        alpha = 1./ (precise_t) iter;
         pi_est = (1-alpha)*pi_est + alpha * pi_calc;
         delta = pi_est - REAL_PI;
         logDelta = fabs((double) delta);
@@ -280,8 +281,9 @@ void *threaded_calc_pi2(void *arg) {
         fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf,%.8lf\n", tid, batch_size*iter, (double) alpha,
                 (double) pi_calc, (double) pi_est, (double) delta, logDelta);
         fclose(pifile);
+        seconds = getElaspedTime(&time);
         if (tid == 0) {
-            fprintf(stdout, "<%d>Iter: %5ld alpha: %le \n", tid, iter, (double) alpha);
+            fprintf(stdout, "<%d>Iter: %5ld alpha: %le  sec/thr: %5.2f\n", tid, iter, (double) alpha, seconds/ (double) NUM_THREADS);
 //            fprintf(stdout, "<%d>Kalman P:  %.12lf\n", tid, (double) kalman->P);
             fprintf(stdout, "<%d>Pi Calc :  %.12lf\n", tid, (double) pi_calc);
             fprintf(stdout, "<%d>Pi IIR  :  %.12lf\n", tid, (double) pi_est);
@@ -291,7 +293,7 @@ void *threaded_calc_pi2(void *arg) {
         }
 
         iter++;
-
+        alpha = 1./ log((double) 1+iter);
     }
 
     pthread_exit(NULL);

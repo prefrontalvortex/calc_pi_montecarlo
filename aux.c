@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <time.h>
 
 #include "aux.h"
 
@@ -26,4 +27,24 @@ void *emalloc(size_t numBytes){ /* Error checked malloc */
         exit(EXIT_FAILURE);
     }
     return buffer;
+}
+
+void startTimer(stopwatch_t *stopwatch) {
+    clock_gettime(CLOCK_REALTIME, &(stopwatch->startElapsed));
+}
+
+double getElaspedTime(stopwatch_t *stopwatch) {
+    struct timespec now, startElapsed;
+    startElapsed = stopwatch->startElapsed;
+    clock_gettime(CLOCK_REALTIME, &now);
+    __time_t tmp_seconds = (now.tv_sec - startElapsed.tv_sec);
+    double seconds = (double) tmp_seconds;
+    __time_t tmp_nano = (now.tv_nsec - startElapsed.tv_nsec);
+    double nano = tmp_nano / 1e9;
+
+    if (nano > 1e9) {
+        tmp_nano = (startElapsed.tv_nsec - now.tv_nsec);
+        nano = tmp_nano / 1e9;
+    }
+    return seconds + nano;
 }
