@@ -19,8 +19,19 @@ typedef struct _Kalman1D {
     long iters;             // iterations run for
 } Kalman1D;
 
-Kalman1D *new_kalman1D(precise_t R_obsvar, precise_t Q_procvar, precise_t guess_x_hat, precise_t init_P);
+typedef struct _SimpleAverage {
+    precise_t obs;          // observations (normal about x, sigma=0.1);
+    precise_t *samples;     // array of samples
+    precise_t mean;
+    precise_t error;
+    long idx;
+    long *iters;             // iterations run for
+} SimpleAverage;
 
+Kalman1D *new_kalman1D(precise_t R_obsvar, precise_t Q_procvar, precise_t guess_x_hat, precise_t init_P);
+SimpleAverage *new_SimpleAverage(long max_iters, int num_threads);
 precise_t kalman_observe(Kalman1D *kalman, precise_t obs);
+precise_t simple_average_observe(SimpleAverage *avglist, precise_t obs);
+precise_t simple_average_mean(SimpleAverage *avglist);
 
 #endif //CALC_PI_MC_KALMAN_H

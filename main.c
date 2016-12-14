@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <pthread.h>
 //#include <random>
@@ -19,12 +20,15 @@
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 
 #define SPECIAL_VEC
+//#define KALMAN
+#define MAX_ITERS 100000
 
 precise_t eps_to_alpha(precise_t epsilon);
 precise_t estimate_pi3(struct drand48_data *rngbuf, long batch_size);
 precise_t estimate_pi3_special(RedbearRNG_data *rngbuf, long batch_size);
 precise_t rand_3sphere_norm(struct drand48_data *rngbuf);
 void *threaded_calc_pi(void *arg);
+void *threaded_calc_pi2(void *arg);
 
 int NUM_THREADS;
 pthread_mutex_t lock_x;
@@ -34,6 +38,7 @@ typedef struct _thread_data_t {
     int tid;
     long batch_size;
     Kalman1D *kalman;
+    SimpleAverage *avglist;
     precise_t pi_calc;
     precise_t pi_est;
     char *filename;
@@ -98,6 +103,7 @@ int main(int argc, char **argv) {
 
 
     Kalman1D *kalman = new_kalman1D(R_init, Q_init, pi_est, 1.0);
+    SimpleAverage *avglist = new_SimpleAverage(MAX_ITERS, NUM_THREADS);
     thread_data_t payload[NUM_THREADS];
     pthread_t threads[NUM_THREADS];
     struct drand48_data rngbuf[NUM_THREADS];
@@ -114,14 +120,16 @@ int main(int argc, char **argv) {
 
         payload[th].tid = th;
         payload[th].kalman = kalman;
+        payload[th].avglist = avglist;
         payload[th].batch_size = batch_size;
         payload[th].rngbuf = &(rngbuf[th]);
         payload[th].rngbuf2 = &(rngbuf2[th]);
-        payload[th].filename = datafilename;
+        payload[th].filename = emalloc(256);
+        sprintf(payload[th].filename, "out/%ld_pi_avg_t%d.csv", (long) tmp_seconds, th);
     }
 
     for (th=0; th<NUM_THREADS; th++) {
-        rc = pthread_create(&threads[th], NULL, threaded_calc_pi, (void *) &payload[th]);
+        rc = pthread_create(&threads[th], NULL, threaded_calc_pi2, (void *) &payload[th]);
 
     }
     for (th = 0; th < NUM_THREADS; th++){
@@ -194,7 +202,7 @@ void *threaded_calc_pi(void *arg) {
     tid = payload->tid;
     long iter = 0, batch_size = payload->batch_size;
     Kalman1D *kalman = payload->kalman;
-    precise_t pi_calc, pi_est, delta;
+    precise_t pi_calc, pi_est, delta, K_gain;
 
     printf("\n<%d> Hi! start.\n", tid);
 
@@ -207,19 +215,74 @@ void *threaded_calc_pi(void *arg) {
         // ========== ENTER CRITICAL REGION *******
         pthread_mutex_lock(&lock_x);
 //        fprintf(stdout, "%d locked\n", tid);
+#ifdef KALMAN
         pi_est = kalman_observe(kalman, pi_calc);
+        K_gain = kalman->K_gain;
+#else
+        pi_est = simple_average_observe(payload->avglist, pi_calc);
+        K_gain = -1;
+#endif
         delta = pi_est - REAL_PI;
         pifile = fopen(payload->filename, "a");
         logDelta = fabs((double) delta);
         logDelta = log10(logDelta);
-        fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf,%.8lf\n", tid, batch_size*iter, (double) kalman->K_gain,
+        fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf,%.8lf\n", tid, batch_size*iter, (double) K_gain,
                 (double) pi_calc, (double) pi_est, (double) delta, logDelta);
         fclose(pifile);
         pthread_mutex_unlock(&lock_x);
         // ========== LEAVE CRITICAL REGION ***
         if (tid == 0) {
-            fprintf(stdout, "<%d>Iter: %5ld Kalman K: %le \n", tid, iter, (double) kalman->K_gain);
-            fprintf(stdout, "<%d>Kalman P:  %.12lf\n", tid, (double) kalman->P);
+            fprintf(stdout, "<%d>Iter: %5ld Kalman K: %le \n", tid, iter, (double) K_gain);
+//            fprintf(stdout, "<%d>Kalman P:  %.12lf\n", tid, (double) kalman->P);
+            fprintf(stdout, "<%d>Pi Calc :  %.12lf\n", tid, (double) pi_calc);
+            fprintf(stdout, "<%d>Pi IIR  :  %.12lf\n", tid, (double) pi_est);
+            fprintf(stdout, "<%d>Diff    : %+.12lf\n", tid, (double) (pi_calc - REAL_PI));
+            fprintf(stdout, "<%d>Diff IIR: %+.12lf\t logD: %+.5lf\n", tid, (double) delta, logDelta);
+
+        }
+
+        iter++;
+
+    }
+
+    pthread_exit(NULL);
+}
+
+void *threaded_calc_pi2(void *arg) {
+    FILE *pifile;
+    int i, tid;
+    double logDelta;
+    thread_data_t *payload = (thread_data_t *) arg;
+    tid = payload->tid;
+    long iter = 0, batch_size = payload->batch_size;
+    Kalman1D *kalman = payload->kalman;
+    precise_t pi_calc, pi_est, delta, K_gain, alpha;
+    pi_est = 3.14;
+    alpha = 0.1;
+
+    printf("\n<%d> Hi! start.\n", tid);
+    pifile = fopen(payload->filename, "w");
+    fprintf(pifile, "thread,iters,alpha,pi_batch,pi_kalman,error,logError\n");
+    fclose(pifile);
+
+    while (1) {
+#ifdef SPECIAL_VEC
+        pi_calc = estimate_pi3_special(payload->rngbuf2, batch_size);
+#else
+        pi_calc = estimate_pi3(payload->rngbuf, batch_size);
+#endif
+        alpha = 1./ (precise_t) iter;
+        pi_est = (1-alpha)*pi_est + alpha * pi_calc;
+        delta = pi_est - REAL_PI;
+        logDelta = fabs((double) delta);
+        logDelta = log10(logDelta);
+        pifile = fopen(payload->filename, "a");
+        fprintf(pifile, "%d,%ld,%le,%.16lf,%.16lf,%.16lf,%.8lf\n", tid, batch_size*iter, (double) alpha,
+                (double) pi_calc, (double) pi_est, (double) delta, logDelta);
+        fclose(pifile);
+        if (tid == 0) {
+            fprintf(stdout, "<%d>Iter: %5ld alpha: %le \n", tid, iter, (double) alpha);
+//            fprintf(stdout, "<%d>Kalman P:  %.12lf\n", tid, (double) kalman->P);
             fprintf(stdout, "<%d>Pi Calc :  %.12lf\n", tid, (double) pi_calc);
             fprintf(stdout, "<%d>Pi IIR  :  %.12lf\n", tid, (double) pi_est);
             fprintf(stdout, "<%d>Diff    : %+.12lf\n", tid, (double) (pi_calc - REAL_PI));
