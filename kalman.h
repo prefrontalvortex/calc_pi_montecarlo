@@ -22,8 +22,12 @@ typedef struct _Kalman1D {
 typedef struct _SimpleAverage {
     precise_t obs;          // observations (normal about x, sigma=0.1);
     precise_t *samples;     // array of samples
+    precise_t total;
+    precise_t vartotal;
     precise_t mean;
+    precise_t var;
     precise_t error;
+    precise_t REAL_PI;
     long idx;
     long *iters;             // iterations run for
 } SimpleAverage;

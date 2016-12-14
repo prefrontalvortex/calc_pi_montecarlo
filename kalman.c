@@ -21,6 +21,10 @@ SimpleAverage *new_SimpleAverage(long max_iters, int num_threads) {
     avglist->samples = (precise_t*) emalloc(max_iters * num_threads * sizeof(precise_t));
     avglist->iters = (long*) emalloc(num_threads * sizeof(long));
     avglist->idx = 0;
+    avglist->total = 0;
+    avglist->vartotal = 0;
+    avglist->REAL_PI = 3.1415926535897932384626433832795028841971; // for diagnostic purposes
+
     return avglist;
 }
 
@@ -39,9 +43,15 @@ precise_t kalman_observe(Kalman1D *kalman, precise_t obs) {
 precise_t simple_average_observe(SimpleAverage *avglist, precise_t obs) {
     // store priors
     avglist->samples[avglist->idx] = obs;
-    avglist->mean = simple_average_mean(avglist);
-    avglist->error = obs - avglist->mean;
+//    avglist->mean = simple_average_mean(avglist);
+    avglist->obs = obs;
+    avglist->total += obs;
+    precise_t delta = (obs - avglist->REAL_PI);
+    avglist->vartotal += (delta * delta);
     avglist->idx++;
+    avglist->error = obs - avglist->mean;
+    avglist->mean = avglist->total / (precise_t) avglist->idx;
+    avglist->var = avglist->vartotal  / (precise_t) avglist->idx;
     return avglist->mean;
 }
 
@@ -53,3 +63,4 @@ precise_t simple_average_mean(SimpleAverage *avglist) {
     }
     return accu / (precise_t) avglist->idx;
 }
+

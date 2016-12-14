@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     long iter=0, lseed, batch_size;
     precise_t pi_est, r_norm, rad_calc[8];
     precise_t pi_calc, ratio, prior, epsilon=99, delta=99, alpha=0.1;
-    REAL_PI = 3.1415926535897932384626433832795028841971; //3.141592653589;
+    REAL_PI = 3.1415926535897932384626433832795028841971; //3.141592653589; // for diagnostic purposes
     double d_batch_size;
     double R_init = 1e-3, Q_init = 1e-6;
 
@@ -133,9 +133,7 @@ int main(int argc, char **argv) {
 
     }
     for (th = 0; th < NUM_THREADS; th++){
-        printf("\n<M>Calling join on thread: %d\n", th);
         pthread_join(threads[th], NULL);
-        printf("<M>... %d joined. \n", th);
     }
 
     return EXIT_SUCCESS;
@@ -252,16 +250,15 @@ void *threaded_calc_pi2(void *arg) {
     FILE *pifile;
     stopwatch_t time;
     int i, tid;
-    double logDelta, seconds;
+    double logDelta, seconds, std;
     thread_data_t *payload = (thread_data_t *) arg;
     tid = payload->tid;
     long iter = 0, batch_size = payload->batch_size;
     Kalman1D *kalman = payload->kalman;
-    precise_t pi_calc, pi_est, delta, K_gain, alpha;
+    precise_t pi_calc, pi_est, delta, K_gain, alpha, var;
     pi_est = 3.14;
     alpha = 0.1;
 
-    printf("\n<%d> Hi! start.\n", tid);
     pifile = fopen(payload->filename, "w");
     fprintf(pifile, "thread,iters,alpha,pi_batch,pi_kalman,error,logError\n");
     fclose(pifile);
@@ -273,7 +270,10 @@ void *threaded_calc_pi2(void *arg) {
 #else
         pi_calc = estimate_pi3(payload->rngbuf, batch_size);
 #endif
-        pi_est = (1-alpha)*pi_est + alpha * pi_calc;
+//        pi_est = (1-alpha)*pi_est + alpha * pi_calc;
+        pi_est = simple_average_observe(payload->avglist, pi_calc);
+        var = payload->avglist->var;
+        std = sqrt((double) var);
         delta = pi_est - REAL_PI;
         logDelta = fabs((double) delta);
         logDelta = log10(logDelta);
@@ -286,7 +286,7 @@ void *threaded_calc_pi2(void *arg) {
             fprintf(stdout, "<%d>Iter: %5ld alpha: %le  sec/thr: %5.2f\n", tid, iter, (double) alpha, seconds/ (double) NUM_THREADS);
 //            fprintf(stdout, "<%d>Kalman P:  %.12lf\n", tid, (double) kalman->P);
             fprintf(stdout, "<%d>Pi Calc :  %.12lf\n", tid, (double) pi_calc);
-            fprintf(stdout, "<%d>Pi IIR  :  %.12lf\n", tid, (double) pi_est);
+            fprintf(stdout, "<%d>Pi IIR  :  %.12lf\tStd: %0.12lf\n", tid, (double) pi_est, std);
             fprintf(stdout, "<%d>Diff    : %+.12lf\n", tid, (double) (pi_calc - REAL_PI));
             fprintf(stdout, "<%d>Diff IIR: %+.12lf\t logD: %+.5lf\n", tid, (double) delta, logDelta);
 
