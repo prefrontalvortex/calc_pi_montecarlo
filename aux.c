@@ -48,3 +48,18 @@ double getElaspedTime(stopwatch_t *stopwatch) {
     }
     return seconds + nano;
 }
+
+void checkpoint_stdprintf(int ccode, const char *format, ...) {
+//    FILE *file = fopen(filename, "a");
+//    if (file != NULL) {
+    fprintf(stderr, "\x1B[38;5;%dm", ccode);
+
+    va_list argptr;
+    va_start(argptr, format);
+    vfprintf(stderr, format, argptr);
+    va_end(argptr);
+    fprintf(stderr, "\x1B[0m"); // reset code
+
+    fflush(stderr);
+//    }
+}
