@@ -23,12 +23,7 @@
 //#define KALMAN
 #define MAX_ITERS 100000
 
-precise_t eps_to_alpha(precise_t epsilon);
-precise_t estimate_pi3(struct drand48_data *rngbuf, long batch_size);
-precise_t estimate_pi3_special(RedbearRNG_data *rngbuf, long batch_size);
-precise_t rand_3sphere_norm(struct drand48_data *rngbuf);
-void *threaded_calc_pi(void *arg);
-void *threaded_calc_pi2(void *arg);
+
 
 int NUM_THREADS;
 pthread_mutex_t lock_x;
@@ -187,6 +182,54 @@ precise_t rand_3sphere_norm(struct drand48_data *rngbuf) {
 
 }
 
+precise_t estimate_pi3_riemann(RedbearRNG_data *rngbuf, long batch_size) {
+    // a^2 + b^2 + c^2 = 1 >> c^2 = 1 - (a^2 + b^2) >> c = sqrt(1 - (a^2 + b^2))
+    const precise_t ONE = 1.0;
+    precise_t x, y, z, r, area2, total_area;
+    double max_x = sqrt( (double) batch_size);
+    precise_t dx = ONE / max_x;
+    precise_t dx4 = dx*dx*dx*dx;
+
+    total_area = 0;
+    precise_t ix, iy, iter;
+    for (ix = 0; ix < 1; ix += dx) {
+        for (iy = 0; iy < 1; iy += dx){
+            x = rand_redbear_uniform_r(rngbuf);
+            y = rand_redbear_uniform_r(rngbuf);
+            x *= x; // x^2
+            y *= y;
+            r = x + y; // actually r**2
+            if (r >= 1) continue; // ignore undefined region
+            z = 1 - x - y;
+//            z = sqrt( (double) z);
+            area2 = z * dx4;
+            total_area += sqrt((double) area2);
+        }
+    }
+    return total_area * 6;
+}
+
+precise_t estimate_pi3_riemann_stoc(RedbearRNG_data *rngbuf, long batch_size) {
+    // a^2 + b^2 + c^2 = 1 >> c^2 = 1 - (a^2 + b^2) >> c = sqrt(1 - (a^2 + b^2))
+    const precise_t ONE = 1.0;
+    precise_t x, y, z, r;
+    long ix, iy, iter;
+    for (iter = 0; iter < batch_size; iter++) {
+        do {
+            x = rand_redbear_uniform_r(rngbuf);
+            y = rand_redbear_uniform_r(rngbuf);
+            x *= x; // x^2
+            y *= y;
+            r = x + y; // actually r**2
+        } while (r >= 1); // ignore undefined region
+        z = 1 - x - y;
+        z = sqrt((double) z);
+
+    }
+    return z;
+}
+
+
 
 precise_t crit_kalman_observe(Kalman1D *kalman, precise_t obs) {
     // Threadsafe Kalman update
@@ -266,7 +309,9 @@ void *threaded_calc_pi2(void *arg) {
     while (1) {
         startTimer(&time);
 #ifdef SPECIAL_VEC
-        pi_calc = estimate_pi3_special(payload->rngbuf2, batch_size);
+//        pi_calc = estimate_pi3_special(payload->rngbuf2, batch_size);
+        pi_calc = estimate_pi3_riemann(payload->rngbuf2, batch_size);
+
 #else
         pi_calc = estimate_pi3(payload->rngbuf, batch_size);
 #endif

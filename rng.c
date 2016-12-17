@@ -83,3 +83,7 @@ uint128_t srand_redbear_r(uint128_t seed, RedbearRNG_data *rngbuffer) {
     rngbuffer->state = seed;
     rngbuffer->state_xor = seed ^ 0xDEADBEEFACE1CA75;
 }
+
+Randobuff *new_Randobuff(long size) {
+
+}

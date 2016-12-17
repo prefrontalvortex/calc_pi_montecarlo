@@ -21,6 +21,12 @@ typedef struct _RedbearRNG_data {
     precise_t uniform;
 } RedbearRNG_data;
 
+typedef struct _Randobuff {
+    uint128_t *states;
+    long idx;
+    long max;
+} Randobuff;
+
 precise_t rand_uniform();
 precise_t rand_uniform_r(struct drand48_data *rngbuffer);
 precise_t rand_uniform32(long rand_int);
